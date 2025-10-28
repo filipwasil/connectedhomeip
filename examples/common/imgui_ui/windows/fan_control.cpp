@@ -58,6 +58,19 @@ static const std::string GetWindBitmapValueString(chip::BitMask<chip::app::Clust
     return result.empty() ? "Unknown" : result;
 }
 
+static void TextAligned(const char* text, bool isRight)
+{
+    if (isRight) {
+        float columnWidth = ImGui::GetColumnWidth();
+        float textWidth = ImGui::CalcTextSize(text).x;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + columnWidth - textWidth - ImGui::GetStyle().ItemSpacing.x);
+    } else {
+        ImGui::SetCursorPosX(0);
+    }
+    
+    ImGui::Text("%s", text);
+}
+
 template <typename T>
 static constexpr int GetBitIdx(const chip::BitMask<T> & bitmap, int tMin, int tMax)
 {
@@ -253,7 +266,7 @@ void FanControl::Render()
     }
 
     // Check if the table can be created
-    if (ImGui::BeginTable("Rock setting", 3)) // 3 columns
+    if (ImGui::BeginTable("Rock setting", 2)) // 3 columns
     {
         // Set up column headers
         ImGui::TableSetupColumn("Setting");
@@ -264,13 +277,13 @@ void FanControl::Render()
         ImGui::TableSetColumnIndex(0);
         ImGui::Text("Rocking");
         ImGui::TableSetColumnIndex(1);
-        ImGui::Text("%s", GetRockBitmapValueString(rockSettingVal).c_str());
+        TextAligned(GetRockBitmapValueString(rockSettingVal).c_str(), true);
 
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
         ImGui::Text("Wind");
         ImGui::TableSetColumnIndex(1);
-        ImGui::Text("%s", GetWindBitmapValueString(windSettingVal).c_str());
+        TextAligned(GetWindBitmapValueString(windSettingVal).c_str(), true);
 
         ImGui::EndTable(); // End the table
     }
