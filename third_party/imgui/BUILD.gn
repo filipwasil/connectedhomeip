@@ -15,6 +15,14 @@
 import("//build_overrides/build.gni")
 import("//build_overrides/chip.gni")
 
+if (current_os != "mac") {
+  import("${build_root}/config/linux/pkg_config.gni")
+
+  pkg_config("sdl2_pkgconfig") {
+    packages = [ "sdl2" ]
+  }
+}
+
 config("imgui_config") {
   include_dirs = [
     "repo",
@@ -22,19 +30,33 @@ config("imgui_config") {
   ]
   defines = [ "CHIP_IMGUI_ENABLED=1" ]
 
-  # FUTURE: these should be parsed from `sdl2-config --cflags`
   if (current_os == "mac") {
-    # Default path setup by `brew install sdl2`
-    include_dirs += [ "/usr/local/include/SDL2" ]
+    # macOS: Use sdl2-config to get the right paths
+    # This works for both Homebrew on Intel (/usr/local) and Apple Silicon (/opt/homebrew)
+    sdl2_cflags =
+        exec_script("${build_root}/config/linux/pkg-config.py",
+                    [
+                      "sdl2",
+                      "--cflags",
+                    ],
+                    "string")
+
+    # Parse the cflags string into a list
+    cflags = []
+    foreach(flag, string_split(sdl2_cflags)) {
+      if (flag != "") {
+        cflags += [ flag ]
+      }
+    }
+
     defines += [ "_THREAD_SAFE" ]
     ldflags = [
       "-framework",
       "OpenGL",
     ]
   } else {
-    # Linux defaults
-    include_dirs += [ "/usr/include/SDL2" ]
-    defines += [ "_REENTRANT" ]
+    # Linux/other: Use pkg-config via the pkg_config template
+    configs = [ ":sdl2_pkgconfig" ]
   }
 }
 
@@ -61,14 +83,32 @@ source_set("imgui") {
     "repo/backends/imgui_impl_sdl2.h",
   ]
 
-  # FUTURE: SDL2 libs should be from `sdl2-config --libs`
-  libs = [
-    "SDL2",
-    "dl",
-  ]
+  # SDL2 libs from pkg-config
+  if (current_os == "mac") {
+    sdl2_libs = exec_script("${build_root}/config/linux/pkg-config.py",
+                            [
+                              "sdl2",
+                              "--libs",
+                            ],
+                            "string")
 
-  if (current_os == "linux") {
-    libs += [ "GL" ]
+    # Parse libs and lib_dirs from the output
+    # Format: -L/path/to/lib -lSDL2 -Wl,-framework,Cocoa ...
+    ldflags = []
+    foreach(flag, string_split(sdl2_libs)) {
+      if (flag != "") {
+        ldflags += [ flag ]
+      }
+    }
+  } else {
+    libs = [
+      "SDL2",
+      "dl",
+    ]
+
+    if (current_os == "linux") {
+      libs += [ "GL" ]
+    }
   }
 
   public_configs = [ ":imgui_config" ]
