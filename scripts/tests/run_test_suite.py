@@ -320,11 +320,17 @@ def cmd_list(context):
     default=False,
     show_default=True,
     help='Use Bluetooth and WiFi mock servers to perform BLE-WiFi commissioning. This option is available on Linux platform only.')
+@click.option(
+    '--wifi-paf',
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help='Use WiFi-PAF (NAN/USD) mock for commissioning without real WiFi hardware. This option is available on Linux platform only.')
 @click.pass_context
 def cmd_run(context, iterations, all_clusters_app, lock_app, ota_provider_app, ota_requestor_app,
             fabric_bridge_app, tv_app, bridge_app, lit_icd_app, microwave_oven_app, rvc_app, network_manager_app,
             energy_gateway_app, energy_management_app, closure_app, matter_repl_yaml_tester,
-            chip_tool_with_python, pics_file, keep_going, test_timeout_seconds, expected_failures, ble_wifi):
+            chip_tool_with_python, pics_file, keep_going, test_timeout_seconds, expected_failures, ble_wifi, wifi_paf):
     if expected_failures != 0 and not keep_going:
         log.error("--expected-failures '%s' used without '--keep-going'", expected_failures)
         sys.exit(2)
@@ -366,6 +372,12 @@ def cmd_run(context, iterations, all_clusters_app, lock_app, ota_provider_app, o
     if ble_wifi and sys.platform != "linux":
         raise click.BadOptionUsage("ble-wifi", "Option --ble-wifi is available on Linux platform only")
 
+    if wifi_paf and sys.platform != "linux":
+        raise click.BadOptionUsage("wifi-paf", "Option --wifi-paf is available on Linux platform only")
+
+    if ble_wifi and wifi_paf:
+        raise click.BadOptionUsage("wifi-paf", "Options --ble-wifi and --wifi-paf are mutually exclusive")
+
     # Command execution requires an array
     paths = chiptest.ApplicationPaths(
         chip_tool=context.obj.chip_tool,
@@ -390,14 +402,19 @@ def cmd_run(context, iterations, all_clusters_app, lock_app, ota_provider_app, o
     ble_controller_app = None
     ble_controller_tool = None
 
+    # WiFi-PAF mode variables
+    nan_simulator = None
+    wifi_app = None
+    wifi_tool = None
+
     if sys.platform == 'linux':
         ns = chiptest.linux.IsolatedNetworkNamespace(
             index=0,
-            # Do not bring up the app interface link automatically when doing BLE-WiFi commissioning.
-            setup_app_link_up=not ble_wifi,
+            # Do not bring up the app interface link automatically when doing BLE-WiFi or WiFi-PAF commissioning.
+            setup_app_link_up=not (ble_wifi or wifi_paf),
             # Change the app link name so the interface will be recognized as WiFi or Ethernet
             # depending on the commissioning method used.
-            app_link_name='wlx-app' if ble_wifi else 'eth-app',
+            app_link_name='wlx-app' if (ble_wifi or wifi_paf) else 'eth-app',
             unshared=context.obj.in_unshare)
 
         if ble_wifi:
@@ -406,6 +423,23 @@ def cmd_run(context, iterations, all_clusters_app, lock_app, ota_provider_app, o
             wifi = chiptest.linux.WpaSupplicantMock("MatterAP", "MatterAPPassword", ns)
             ble_controller_app = 0   # Bind app to the first BLE controller
             ble_controller_tool = 1  # Bind tool to the second BLE controller
+
+        if wifi_paf:
+            bus = chiptest.linux.DBusTestSystemBus()
+            nan_simulator = chiptest.linux.NANSimulator(discovery_delay=0.1)
+
+            # Create two mock instances - one for app (publisher), one for tool (subscriber)
+            wifi_app = chiptest.linux.WpaSupplicantMock(
+                "MatterAP", "MatterAPPassword", ns,
+                nan_simulator=nan_simulator, mock_name="app")
+            wifi_tool = chiptest.linux.WpaSupplicantMock(
+                "MatterAP", "MatterAPPassword", ns,
+                nan_simulator=nan_simulator, mock_name="tool")
+
+            nan_simulator.register_mock("app", wifi_app)
+            nan_simulator.register_mock("tool", wifi_tool)
+
+            log.info("WiFi-PAF mode enabled with NAN simulator")
 
         executor = chiptest.linux.LinuxNamespacedExecutor(ns)
     elif sys.platform == 'darwin':
@@ -427,6 +461,10 @@ def cmd_run(context, iterations, all_clusters_app, lock_app, ota_provider_app, o
             if ble_wifi:
                 wifi.terminate()
                 bluetooth.terminate()
+                bus.terminate()
+            if wifi_paf:
+                wifi_app.terminate()
+                wifi_tool.terminate()
                 bus.terminate()
             ns.terminate()
 
