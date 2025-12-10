@@ -259,6 +259,144 @@ class BluetoothMock(subprocess.Popen):
         self.wait()
 
 
+class NANSimulator:
+    """Coordinates NAN discovery and data exchange between WpaSupplicantMock instances.
+
+    This class simulates NAN (Neighbor Awareness Networking) by routing discovery
+    events and data between publisher and subscriber mock instances. It enables
+    WiFi-PAF testing without real WiFi hardware.
+    """
+
+    def __init__(self, discovery_delay: float = 0.1):
+        self.discovery_delay = discovery_delay
+        self.mocks: dict = {}  # {name: WpaSupplicantMock}
+        self.publishers: dict = {}  # {pub_id: (mock_name, args)}
+        self.subscribers: dict = {}  # {sub_id: (mock_name, args)}
+        self._mac_counter = 0
+        self._lock = threading.Lock()
+
+    def register_mock(self, name: str, mock: 'WpaSupplicantMock'):
+        """Register a WpaSupplicantMock instance with this simulator."""
+        with self._lock:
+            self.mocks[name] = mock
+            mock.nan_simulator = self
+            mock.mock_mac = self._generate_mac()
+            log.debug("NANSimulator: Registered mock '%s' with MAC %s", name, mock.mock_mac)
+
+    def _generate_mac(self) -> str:
+        """Generate unique MAC address for mock."""
+        self._mac_counter += 1
+        return f"00:11:22:33:44:{self._mac_counter:02x}"
+
+    def on_publish_started(self, mock_name: str, publish_id: int, args: dict):
+        """Called when a mock starts publishing."""
+        with self._lock:
+            self.publishers[publish_id] = (mock_name, args)
+            log.debug("NANSimulator: Publisher started - mock=%s, pub_id=%d", mock_name, publish_id)
+
+    def on_publish_cancelled(self, publish_id: int):
+        """Called when a publish session is cancelled."""
+        with self._lock:
+            if publish_id in self.publishers:
+                del self.publishers[publish_id]
+                log.debug("NANSimulator: Publisher cancelled - pub_id=%d", publish_id)
+
+    async def on_subscribe_started(self, mock_name: str, subscribe_id: int, args: dict):
+        """Called when a mock starts subscribing. Triggers discovery after delay."""
+        with self._lock:
+            self.subscribers[subscribe_id] = (mock_name, args)
+            log.debug("NANSimulator: Subscriber started - mock=%s, sub_id=%d", mock_name, subscribe_id)
+
+        # Process discoveries after a delay
+        await asyncio.sleep(self.discovery_delay)
+        await self._process_discoveries(mock_name, subscribe_id, args)
+
+    def on_subscribe_cancelled(self, subscribe_id: int):
+        """Called when a subscribe session is cancelled."""
+        with self._lock:
+            if subscribe_id in self.subscribers:
+                del self.subscribers[subscribe_id]
+                log.debug("NANSimulator: Subscriber cancelled - sub_id=%d", subscribe_id)
+
+    async def _process_discoveries(self, sub_mock_name: str, sub_id: int, sub_args: dict):
+        """Match subscriber with publishers and emit discovery signals."""
+        with self._lock:
+            publishers_copy = dict(self.publishers)
+            mocks_copy = dict(self.mocks)
+
+        sub_mock = mocks_copy.get(sub_mock_name)
+        if not sub_mock:
+            return
+
+        sub_srv_name = sub_args.get('srv_name', '')
+
+        for pub_id, (pub_mock_name, pub_args) in publishers_copy.items():
+            # Don't match same mock
+            if sub_mock_name == pub_mock_name:
+                continue
+
+            pub_mock = mocks_copy.get(pub_mock_name)
+            if not pub_mock:
+                continue
+
+            # Check service name match
+            pub_srv_name = pub_args.get('srv_name', '')
+            if sub_srv_name and pub_srv_name and sub_srv_name != pub_srv_name:
+                continue
+
+            log.debug("NANSimulator: Discovery match - sub=%s (id=%d) <-> pub=%s (id=%d)",
+                      sub_mock_name, sub_id, pub_mock_name, pub_id)
+
+            # Emit NANDiscoveryResult to subscriber
+            discovery_args = {
+                'subscribe_id': ('u', sub_id),
+                'publish_id': ('u', pub_id),
+                'peer_addr': ('s', pub_mock.mock_mac),
+                'srv_proto_type': ('y', pub_args.get('srv_proto_type', 3)),
+                'ssi': ('ay', pub_args.get('ssi', b'')),
+            }
+            await sub_mock.emit_nan_discovery_result(discovery_args)
+
+            # Emit NANReplied to publisher
+            replied_args = {
+                'publish_id': ('u', pub_id),
+                'subscribe_id': ('u', sub_id),
+                'peer_addr': ('s', sub_mock.mock_mac),
+                'srv_proto_type': ('y', sub_args.get('srv_proto_type', 3)),
+                'ssi': ('ay', sub_args.get('ssi', b'')),
+            }
+            await pub_mock.emit_nan_replied(replied_args)
+
+    async def on_transmit(self, sender_mock: 'WpaSupplicantMock', handle: int,
+                          req_instance_id: int, peer_addr: str, ssi: bytes):
+        """Route NAN transmit to the appropriate receiver."""
+        with self._lock:
+            mocks_copy = dict(self.mocks)
+
+        # Find receiver mock by MAC address
+        receiver = None
+        for mock in mocks_copy.values():
+            if mock.mock_mac == peer_addr:
+                receiver = mock
+                break
+
+        if receiver is None:
+            log.warning("NANSimulator: No receiver found for peer_addr=%s", peer_addr)
+            return
+
+        log.debug("NANSimulator: Routing transmit from %s to %s",
+                  sender_mock.mock_mac, peer_addr)
+
+        # Emit NANReceive on receiver
+        receive_args = {
+            'id': ('u', req_instance_id),
+            'peer_id': ('u', handle),
+            'peer_addr': ('s', sender_mock.mock_mac),
+            'ssi': ('ay', ssi),
+        }
+        await receiver.emit_nan_receive(receive_args)
+
+
 class WpaSupplicantMock(threading.Thread):
     """Mock server for WpaSupplicant D-Bus API.
 
@@ -272,6 +410,8 @@ class WpaSupplicantMock(threading.Thread):
     association process, between the "associated" and "completed" states,
     the provided IsolatedNetworkNamespace instance is used to bring up the
     link to simulate network connectivity.
+
+    Extended to support NAN (Neighbor Awareness Networking) for WiFi-PAF testing.
     """
 
     class Wpa(sdbus.DbusInterfaceCommonAsync,
@@ -294,9 +434,14 @@ class WpaSupplicantMock(threading.Thread):
         state = "disconnected"
         current_network = "/"
 
+        # NAN session tracking (class-level counters)
+        _publish_id_counter = 0
+        _subscribe_id_counter = 0
+
         def __init__(self, mock):
             super().__init__()
             self.mock = mock
+            self._nan_sessions = {}  # {session_id: session_info}
 
         @sdbus.dbus_method_async("s")
         async def AutoScan(self, arg):
@@ -337,6 +482,202 @@ class WpaSupplicantMock(threading.Thread):
         @sdbus.dbus_method_async()
         async def SaveConfig(self):
             pass
+
+        # =====================================================================
+        # NAN (Neighbor Awareness Networking) Methods
+        # =====================================================================
+
+        @sdbus.dbus_method_async("a{sv}", "u")
+        async def NANPublish(self, nan_args: dict) -> int:
+            """Start NAN publish session.
+
+            Args:
+                nan_args: Dictionary containing:
+                    - srv_name: Service name (e.g., "_matterc._udp")
+                    - srv_proto_type: Protocol type (3 = CSA Matter)
+                    - ttl: Time to live in seconds
+                    - freq: Channel frequency
+                    - ssi: Service Specific Info bytes
+                    - freq_list: List of frequencies
+
+            Returns:
+                publish_id: Unique identifier for this publish session
+            """
+            WpaSupplicantMock.WpaInterface._publish_id_counter += 1
+            publish_id = WpaSupplicantMock.WpaInterface._publish_id_counter
+
+            # Extract args from GVariant format
+            args_dict = self._extract_variant_dict(nan_args)
+
+            session_info = {
+                'type': 'publish',
+                'id': publish_id,
+                'args': args_dict,
+                'active': True
+            }
+            self._nan_sessions[publish_id] = session_info
+
+            log.debug("NANPublish: publish_id=%d, args=%s", publish_id, args_dict)
+
+            # Notify NANSimulator if connected
+            if self.mock.nan_simulator and self.mock.mock_name:
+                self.mock.nan_simulator.on_publish_started(
+                    self.mock.mock_name, publish_id, args_dict)
+
+            return publish_id
+
+        @sdbus.dbus_method_async("u")
+        async def NANCancelPublish(self, publish_id: int):
+            """Cancel a NAN publish session."""
+            log.debug("NANCancelPublish: publish_id=%d", publish_id)
+
+            if publish_id in self._nan_sessions:
+                del self._nan_sessions[publish_id]
+
+            if self.mock.nan_simulator:
+                self.mock.nan_simulator.on_publish_cancelled(publish_id)
+
+        @sdbus.dbus_method_async("a{sv}")
+        async def NANUpdatePublish(self, nan_args: dict):
+            """Update an existing publish session."""
+            args_dict = self._extract_variant_dict(nan_args)
+            publish_id = args_dict.get('publish_id')
+            log.debug("NANUpdatePublish: publish_id=%s, args=%s", publish_id, args_dict)
+
+            if publish_id and publish_id in self._nan_sessions:
+                self._nan_sessions[publish_id]['args'].update(args_dict)
+
+        @sdbus.dbus_method_async("a{sv}", "u")
+        async def NANSubscribe(self, nan_args: dict) -> int:
+            """Start NAN subscribe session.
+
+            Returns:
+                subscribe_id: Unique identifier for this subscribe session
+            """
+            WpaSupplicantMock.WpaInterface._subscribe_id_counter += 1
+            subscribe_id = WpaSupplicantMock.WpaInterface._subscribe_id_counter
+
+            # Extract args from GVariant format
+            args_dict = self._extract_variant_dict(nan_args)
+
+            session_info = {
+                'type': 'subscribe',
+                'id': subscribe_id,
+                'args': args_dict,
+                'active': True
+            }
+            self._nan_sessions[subscribe_id] = session_info
+
+            log.debug("NANSubscribe: subscribe_id=%d, args=%s", subscribe_id, args_dict)
+
+            # Notify NANSimulator to trigger discovery
+            if self.mock.nan_simulator and self.mock.mock_name:
+                asyncio.create_task(
+                    self.mock.nan_simulator.on_subscribe_started(
+                        self.mock.mock_name, subscribe_id, args_dict))
+
+            return subscribe_id
+
+        @sdbus.dbus_method_async("u")
+        async def NANCancelSubscribe(self, subscribe_id: int):
+            """Cancel a NAN subscribe session."""
+            log.debug("NANCancelSubscribe: subscribe_id=%d", subscribe_id)
+
+            if subscribe_id in self._nan_sessions:
+                del self._nan_sessions[subscribe_id]
+
+            if self.mock.nan_simulator:
+                self.mock.nan_simulator.on_subscribe_cancelled(subscribe_id)
+
+        @sdbus.dbus_method_async("a{sv}")
+        async def NANTransmit(self, nan_args: dict):
+            """Transmit data via NAN follow-up.
+
+            Args:
+                nan_args: Dictionary containing:
+                    - handle: Local session ID (publish or subscribe)
+                    - req_instance_id: Remote peer's session ID
+                    - peer_addr: MAC address string "xx:xx:xx:xx:xx:xx"
+                    - ssi: Payload bytes
+            """
+            args_dict = self._extract_variant_dict(nan_args)
+            log.debug("NANTransmit: args=%s", args_dict)
+
+            if self.mock.nan_simulator:
+                await self.mock.nan_simulator.on_transmit(
+                    sender_mock=self.mock,
+                    handle=args_dict.get('handle', 0),
+                    req_instance_id=args_dict.get('req_instance_id', 0),
+                    peer_addr=args_dict.get('peer_addr', ''),
+                    ssi=args_dict.get('ssi', b'')
+                )
+
+        def _extract_variant_dict(self, variant_dict: dict) -> dict:
+            """Extract values from GVariant a{sv} format to plain dict."""
+            result = {}
+            for key, value in variant_dict.items():
+                if isinstance(value, tuple) and len(value) == 2:
+                    # GVariant format: (type_string, actual_value)
+                    result[key] = value[1]
+                else:
+                    result[key] = value
+            return result
+
+        # =====================================================================
+        # NAN D-Bus Signals
+        # =====================================================================
+
+        @sdbus.dbus_signal_async("a{sv}")
+        def NANDiscoveryResult(self) -> dict:
+            """Signal emitted when a publisher is discovered.
+
+            Args dict contains:
+                - subscribe_id: Local subscribe session ID
+                - publish_id: Remote peer's publish ID
+                - peer_addr: MAC address string
+                - srv_proto_type: Service protocol type
+                - ssi: Service Specific Info bytes
+            """
+            raise NotImplementedError
+
+        @sdbus.dbus_signal_async("a{sv}")
+        def NANReplied(self) -> dict:
+            """Signal emitted when a subscriber replies to our publish.
+
+            Args dict contains:
+                - publish_id: Local publish session ID
+                - subscribe_id: Remote peer's subscribe ID
+                - peer_addr: MAC address string
+                - srv_proto_type: Service protocol type
+                - ssi: Service Specific Info bytes
+            """
+            raise NotImplementedError
+
+        @sdbus.dbus_signal_async("a{sv}")
+        def NANReceive(self) -> dict:
+            """Signal emitted when NAN follow-up data is received.
+
+            Args dict contains:
+                - id: Local session ID
+                - peer_id: Remote peer's session ID
+                - peer_addr: MAC address string
+                - ssi: Payload bytes
+            """
+            raise NotImplementedError
+
+        @sdbus.dbus_signal_async("us")
+        def NANPublishTerminated(self) -> tuple:
+            """Signal: (publish_id, reason)"""
+            raise NotImplementedError
+
+        @sdbus.dbus_signal_async("us")
+        def NANSubscribeTerminated(self) -> tuple:
+            """Signal: (subscribe_id, reason)"""
+            raise NotImplementedError
+
+        # =====================================================================
+        # Properties
+        # =====================================================================
 
         @sdbus.dbus_property_async("s")
         def State(self):
@@ -393,10 +734,14 @@ class WpaSupplicantMock(threading.Thread):
         self.net = WpaSupplicantMock.WpaNetwork(self)
         self.net.export_to_dbus(self.net.path)
 
-    def __init__(self, ssid: str, password: str, ns: IsolatedNetworkNamespace):
+    def __init__(self, ssid: str, password: str, ns: IsolatedNetworkNamespace,
+                 nan_simulator: NANSimulator = None, mock_name: str = None):
         self.ssid = ssid
         self.password = password
         self.networking = ns
+        self.nan_simulator = nan_simulator
+        self.mock_name = mock_name
+        self.mock_mac = "00:00:00:00:00:00"  # Will be set by NANSimulator
         self.loop = asyncio.new_event_loop()
         self.loop.run_until_complete(self.startup())
         super().__init__(target=self.loop.run_forever)
@@ -405,3 +750,56 @@ class WpaSupplicantMock(threading.Thread):
     def terminate(self):
         self.loop.call_soon_threadsafe(self.loop.stop)
         self.join()
+
+    # =========================================================================
+    # NAN Signal Emission Helpers (called by NANSimulator)
+    # =========================================================================
+
+    async def emit_nan_discovery_result(self, args: dict):
+        """Emit NANDiscoveryResult signal."""
+        log.debug("Emitting NANDiscoveryResult: %s", args)
+        self.iface.NANDiscoveryResult.emit(args)
+
+    async def emit_nan_replied(self, args: dict):
+        """Emit NANReplied signal."""
+        log.debug("Emitting NANReplied: %s", args)
+        self.iface.NANReplied.emit(args)
+
+    async def emit_nan_receive(self, args: dict):
+        """Emit NANReceive signal."""
+        log.debug("Emitting NANReceive: %s", args)
+        self.iface.NANReceive.emit(args)
+
+    async def emit_nan_publish_terminated(self, publish_id: int, reason: str):
+        """Emit NANPublishTerminated signal."""
+        log.debug("Emitting NANPublishTerminated: publish_id=%d, reason=%s", publish_id, reason)
+        self.iface.NANPublishTerminated.emit((publish_id, reason))
+
+    async def emit_nan_subscribe_terminated(self, subscribe_id: int, reason: str):
+        """Emit NANSubscribeTerminated signal."""
+        log.debug("Emitting NANSubscribeTerminated: subscribe_id=%d, reason=%s", subscribe_id, reason)
+        self.iface.NANSubscribeTerminated.emit((subscribe_id, reason))
+
+    # =========================================================================
+    # Test Control Methods (for manual event injection in tests)
+    # =========================================================================
+
+    def inject_nan_discovery(self, discovery_args: dict):
+        """Inject a discovery event (for testing)."""
+        asyncio.run_coroutine_threadsafe(
+            self.emit_nan_discovery_result(discovery_args), self.loop)
+
+    def inject_nan_receive(self, receive_args: dict):
+        """Inject a receive event (for testing)."""
+        asyncio.run_coroutine_threadsafe(
+            self.emit_nan_receive(receive_args), self.loop)
+
+    def inject_nan_publish_terminated(self, publish_id: int, reason: str):
+        """Inject a publish terminated event (for testing)."""
+        asyncio.run_coroutine_threadsafe(
+            self.emit_nan_publish_terminated(publish_id, reason), self.loop)
+
+    def inject_nan_subscribe_terminated(self, subscribe_id: int, reason: str):
+        """Inject a subscribe terminated event (for testing)."""
+        asyncio.run_coroutine_threadsafe(
+            self.emit_nan_subscribe_terminated(subscribe_id, reason), self.loop)
