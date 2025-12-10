@@ -404,8 +404,6 @@ def cmd_run(context, iterations, all_clusters_app, lock_app, ota_provider_app, o
 
     # WiFi-PAF mode variables
     nan_simulator = None
-    wifi_app = None
-    wifi_tool = None
 
     if sys.platform == 'linux':
         ns = chiptest.linux.IsolatedNetworkNamespace(
@@ -420,24 +418,22 @@ def cmd_run(context, iterations, all_clusters_app, lock_app, ota_provider_app, o
         if ble_wifi:
             bus = chiptest.linux.DBusTestSystemBus()
             bluetooth = chiptest.linux.BluetoothMock()
-            wifi = chiptest.linux.WpaSupplicantMock("MatterAP", "MatterAPPassword", ns)
+            wifi = chiptest.linux.WpaSupplicantMock("MatterAP", "MatterAPPassword", ns,
+                                                     num_interfaces=1)
             ble_controller_app = 0   # Bind app to the first BLE controller
             ble_controller_tool = 1  # Bind tool to the second BLE controller
 
         if wifi_paf:
             bus = chiptest.linux.DBusTestSystemBus()
+
+            # Single mock with two interfaces (like real wpa_supplicant)
+            wifi = chiptest.linux.WpaSupplicantMock("MatterAP", "MatterAPPassword", ns,
+                                                     num_interfaces=2)
+
+            # NANSimulator coordinates between interfaces
             nan_simulator = chiptest.linux.NANSimulator(discovery_delay=0.1)
-
-            # Create two mock instances - one for app (publisher), one for tool (subscriber)
-            wifi_app = chiptest.linux.WpaSupplicantMock(
-                "MatterAP", "MatterAPPassword", ns,
-                nan_simulator=nan_simulator, mock_name="app")
-            wifi_tool = chiptest.linux.WpaSupplicantMock(
-                "MatterAP", "MatterAPPassword", ns,
-                nan_simulator=nan_simulator, mock_name="tool")
-
-            nan_simulator.register_mock("app", wifi_app)
-            nan_simulator.register_mock("tool", wifi_tool)
+            nan_simulator.register_interface("app", wifi.interfaces[0])   # For app/publisher
+            nan_simulator.register_interface("tool", wifi.interfaces[1])  # For tool/subscriber
 
             log.info("WiFi-PAF mode enabled with NAN simulator")
 
@@ -463,8 +459,7 @@ def cmd_run(context, iterations, all_clusters_app, lock_app, ota_provider_app, o
                 bluetooth.terminate()
                 bus.terminate()
             if wifi_paf:
-                wifi_app.terminate()
-                wifi_tool.terminate()
+                wifi.terminate()
                 bus.terminate()
             ns.terminate()
 
