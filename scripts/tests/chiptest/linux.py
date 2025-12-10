@@ -735,12 +735,11 @@ class WpaSupplicantMock(threading.Thread):
         self.net.export_to_dbus(self.net.path)
 
     def __init__(self, ssid: str, password: str, ns: IsolatedNetworkNamespace,
-                 nan_simulator: NANSimulator = None, mock_name: str = None):
+                 nan_simulator: NANSimulator = None):
         self.ssid = ssid
         self.password = password
         self.networking = ns
         self.nan_simulator = nan_simulator
-        self.mock_name = mock_name
         self.mock_mac = "00:00:00:00:00:00"  # Will be set by NANSimulator
         self.loop = asyncio.new_event_loop()
         self.loop.run_until_complete(self.startup())
