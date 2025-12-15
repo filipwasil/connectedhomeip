@@ -492,7 +492,8 @@ def cmd_run(context, iterations, all_clusters_app, lock_app, ota_provider_app, o
                     runner, apps_register, paths, pics_file, test_timeout_seconds, context.obj.dry_run,
                     test_runtime=context.obj.runtime,
                     ble_controller_app=ble_controller_app,
-                    ble_controller_tool=ble_controller_tool
+                    ble_controller_tool=ble_controller_tool,
+                    wifi_paf=wifi_paf
                 )
                 if not context.obj.dry_run:
                     test_end = time.monotonic()
