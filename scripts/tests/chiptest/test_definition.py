@@ -13,6 +13,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import asyncio
 import logging
 import os
 import shlex
@@ -381,7 +382,8 @@ class TestDefinition:
             test_runtime: TestRunTime = TestRunTime.CHIP_TOOL_PYTHON,
             ble_controller_app: typing.Optional[int] = None,
             ble_controller_tool: typing.Optional[int] = None,
-            wifi_paf=False):
+            wifi_paf=False,
+            nan_simulator=None):
         """
         Executes the given test case using the provided runner for execution.
         """
@@ -471,6 +473,27 @@ class TestDefinition:
                 app.start()
                 setupCode = app.setupCode
 
+                # Start NAN publishing for WiFi-PAF
+                if wifi_paf and nan_simulator:
+                    app_interface = nan_simulator.interfaces.get("app")
+                    if app_interface:
+                        publish_args = {
+                            'srv_name': 'MatterService',  # Must match subscriber's expected service
+                            'srv_proto_type': 3,          # Use Matter's protocol type
+                            'ssi': b'',                   # Optional service-specific info
+                        }
+
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            # Await the coroutine to get publish_id
+                            publish_id = loop.run_until_complete(
+                                app_interface.NANPublish(publish_args)
+                            )
+                            log.info("Started NAN publishing on app interface (ID: %d)", publish_id)
+                        finally:
+                            loop.close()
+
             if test_runtime == TestRunTime.MATTER_REPL_PYTHON:
                 python_cmd = apps.matter_repl_yaml_tester_cmd.with_args(
                     '--setup-code', setupCode, '--yaml-path', self.run_name, "--pics-file", pics_file)
@@ -488,7 +511,8 @@ class TestDefinition:
                         "pairing", "code-wifi", TEST_NODE_ID, "MatterAP", "MatterAPPassword", TEST_SETUP_QR_CODE)
                     pairing_server_args = ["--ble-controller", str(ble_controller_tool)]
                 elif wifi_paf is not None:
-                    pairing_cmd = apps.chip_tool_with_python_cmd.with_args("pairing", "wifipaf-wifi", TEST_NODE_ID, "MatterAP", "MatterAPPassword", "20202021", "3840")
+                    pairing_cmd = apps.chip_tool_with_python_cmd.with_args("pairing", "wifipaf-wifi", TEST_NODE_ID,
+                        "MatterAP", "MatterAPPassword", TEST_PASSCODE, TEST_DISCRIMINATOR)
                 else:
                     pairing_cmd = apps.chip_tool_with_python_cmd.with_args('pairing', 'code', TEST_NODE_ID, setupCode)
 
@@ -536,4 +560,15 @@ class TestDefinition:
             if not ok and not loggedCapturedLogs:
                 log.error("!!!!!!!!!!!!!!!!!!!! ERROR !!!!!!!!!!!!!!!!!!!!!!")
                 runner.capture_delegate.LogContents()
-                raise RuntimeError('Subprocess terminated abnormally')
+                raise Exception('Subprocess terminated abnormally')
+
+            # Cancel NAN publishing if active
+            if not dry_run and wifi_paf and nan_simulator and publish_id is not None:
+                app_interface = nan_simulator.interfaces.get("app")
+                if app_interface:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(app_interface.NANCancelPublish(publish_id))
+                    finally:
+                        loop.close()
