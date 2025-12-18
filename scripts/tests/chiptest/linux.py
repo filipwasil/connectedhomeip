@@ -340,7 +340,7 @@ class NANSimulator:
                 'subscribe_id': ('u', sub_id),
                 'publish_id': ('u', pub_id),
                 'peer_addr': ('s', pub_iface.mock_mac),
-                'srv_proto_type': ('y', pub_args.get('srv_proto_type', 3)),
+                'srv_proto_type': ('u', pub_args.get('srv_proto_type', 3)),
                 'ssi': ('ay', pub_args.get('ssi', b'')),
             }
             sub_iface.emit_nan_discovery_result(discovery_args)
@@ -350,7 +350,7 @@ class NANSimulator:
                 'publish_id': ('u', pub_id),
                 'subscribe_id': ('u', sub_id),
                 'peer_addr': ('s', sub_iface.mock_mac),
-                'srv_proto_type': ('y', sub_args.get('srv_proto_type', 3)),
+                'srv_proto_type': ('u', sub_args.get('srv_proto_type', 3)),
                 'ssi': ('ay', sub_args.get('ssi', b'')),
             }
             pub_iface.emit_nan_replied(replied_args)
@@ -421,11 +421,13 @@ class WpaSupplicantMock(threading.Thread):
 
         @sdbus.dbus_method_async("s", "o")
         async def GetInterface(self, name) -> str:
-            # Return next available interface path (round-robin)
+            name_lower = name.lower()
             if 'app' == name.lower():
                 return self.mock.interfaces[0].path
+            elif 'tool' in name_lower and len[self.mock_interfaces] > 1:
+                return self.mock.interfacecs[1].path
             else:
-                return self.mock.interfaces[1].path if len(self.mock.interfaces) > 1 else self.mock.interfaces[0].path
+                return self.mock.interfaces[0].path
 
     class WpaInterface(sdbus.DbusInterfaceCommonAsync,
                        interface_name="fi.w1.wpa_supplicant1.Interface"):

@@ -443,6 +443,9 @@ class TestDefinition:
                         key = 'default'
                     if ble_controller_app is not None:
                         command = command.with_args("--ble-controller", str(ble_controller_app), "--wifi")
+                    elif wifi_paf is not None:
+                        # Use WiFi PAF mode for testing
+                        command = command.with_args("--wifi", "--wifipaf", "")
                     app = App(runner, command)
                     # Add the App to the register immediately, so if it fails during
                     # start() we will be able to clean things up properly.
@@ -472,27 +475,6 @@ class TestDefinition:
                 app = apps_register.get('default')
                 app.start()
                 setupCode = app.setupCode
-
-                # Start NAN publishing for WiFi-PAF
-                if wifi_paf and nan_simulator:
-                    app_interface = nan_simulator.interfaces.get("app")
-                    if app_interface:
-                        publish_args = {
-                            'srv_name': '_matterc._udp',  # Must match subscriber's expected service
-                            'srv_proto_type': 3,          # Use Matter's protocol type
-                            'ssi': b'',                   # Optional service-specific info
-                        }
-
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            # Await the coroutine to get publish_id
-                            publish_id = loop.run_until_complete(
-                                app_interface.NANPublish(publish_args)
-                            )
-                            log.info("Started NAN publishing on app interface (ID: %d)", publish_id)
-                        finally:
-                            loop.close()
 
             if test_runtime == TestRunTime.MATTER_REPL_PYTHON:
                 python_cmd = apps.matter_repl_yaml_tester_cmd.with_args(
