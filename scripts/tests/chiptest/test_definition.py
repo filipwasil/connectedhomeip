@@ -13,6 +13,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import asyncio
 import logging
 import os
 import shlex
@@ -380,14 +381,16 @@ class TestDefinition:
             timeout_seconds: typing.Optional[int], dry_run=False,
             test_runtime: TestRunTime = TestRunTime.CHIP_TOOL_PYTHON,
             ble_controller_app: typing.Optional[int] = None,
-            ble_controller_tool: typing.Optional[int] = None):
+            ble_controller_tool: typing.Optional[int] = None,
+            wifi_paf=False,
+            nan_simulator=None):
         """
         Executes the given test case using the provided runner for execution.
         """
         runner.capture_delegate = ExecutionCapture()
 
         tool_storage_dir = None
-
+        publish_id = None
         loggedCapturedLogs = False
 
         try:
@@ -440,6 +443,9 @@ class TestDefinition:
                         key = 'default'
                     if ble_controller_app is not None:
                         command = command.with_args("--ble-controller", str(ble_controller_app), "--wifi")
+                    elif wifi_paf is not None:
+                        # Use WiFi PAF mode for testing
+                        command = command.with_args("--wifi", "--wifipaf", "")
                     app = App(runner, command)
                     # Add the App to the register immediately, so if it fails during
                     # start() we will be able to clean things up properly.
@@ -486,6 +492,9 @@ class TestDefinition:
                     pairing_cmd = apps.chip_tool_with_python_cmd.with_args(
                         "pairing", "code-wifi", TEST_NODE_ID, "MatterAP", "MatterAPPassword", TEST_SETUP_QR_CODE)
                     pairing_server_args = ["--ble-controller", str(ble_controller_tool)]
+                elif wifi_paf is not None:
+                    pairing_cmd = apps.chip_tool_with_python_cmd.with_args("pairing", "wifipaf-wifi", TEST_NODE_ID,
+                        "MatterAP", "MatterAPPassword", TEST_PASSCODE, TEST_DISCRIMINATOR)
                 else:
                     pairing_cmd = apps.chip_tool_with_python_cmd.with_args('pairing', 'code', TEST_NODE_ID, setupCode)
 
@@ -533,4 +542,15 @@ class TestDefinition:
             if not ok and not loggedCapturedLogs:
                 log.error("!!!!!!!!!!!!!!!!!!!! ERROR !!!!!!!!!!!!!!!!!!!!!!")
                 runner.capture_delegate.LogContents()
-                raise RuntimeError('Subprocess terminated abnormally')
+                raise Exception('Subprocess terminated abnormally')
+
+            # Cancel NAN publishing if active
+            if not dry_run and wifi_paf and nan_simulator and publish_id is not None:
+                app_interface = nan_simulator.interfaces.get("app")
+                if app_interface:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(app_interface.NANCancelPublish(publish_id))
+                    finally:
+                        loop.close()
