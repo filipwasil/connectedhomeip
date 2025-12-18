@@ -390,7 +390,7 @@ class TestDefinition:
         runner.capture_delegate = ExecutionCapture()
 
         tool_storage_dir = None
-
+        publish_id = None
         loggedCapturedLogs = False
 
         try:
@@ -478,7 +478,7 @@ class TestDefinition:
                     app_interface = nan_simulator.interfaces.get("app")
                     if app_interface:
                         publish_args = {
-                            'srv_name': 'MatterService',  # Must match subscriber's expected service
+                            'srv_name': '_matterc._udp',  # Must match subscriber's expected service
                             'srv_proto_type': 3,          # Use Matter's protocol type
                             'ssi': b'',                   # Optional service-specific info
                         }
