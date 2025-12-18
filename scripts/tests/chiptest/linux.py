@@ -410,21 +410,22 @@ class WpaSupplicantMock(threading.Thread):
         def __init__(self, mock: 'WpaSupplicantMock'):
             super().__init__()
             self.mock = mock
-            self._get_interface_counter = 0
 
         @sdbus.dbus_method_async("a{sv}", "o")
         async def CreateInterface(self, args) -> str:
-            # Return next available interface path (round-robin)
-            index = self._get_interface_counter % len(self.mock.interfaces)
-            self._get_interface_counter += 1
-            return self.mock.interfaces[index].path
+            ifname = ''
+            if 'Ifname' in args:
+                value = args['Ifname']
+                ifname = value [1] if isinstance (value, tuple) else value
+            return await self.GetInterface(ifname)
 
         @sdbus.dbus_method_async("s", "o")
         async def GetInterface(self, name) -> str:
             # Return next available interface path (round-robin)
-            index = self._get_interface_counter % len(self.mock.interfaces)
-            self._get_interface_counter += 1
-            return self.mock.interfaces[index].path
+            if 'app' == name.lower():
+                return self.mock.interfaces[0].path
+            else:
+                return self.mock.interfaces[1].path if len(self.mock.interfaces) > 1 else self.mock.interfaces[0].path
 
     class WpaInterface(sdbus.DbusInterfaceCommonAsync,
                        interface_name="fi.w1.wpa_supplicant1.Interface"):

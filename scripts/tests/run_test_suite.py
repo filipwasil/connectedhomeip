@@ -428,8 +428,8 @@ def cmd_run(context, iterations, all_clusters_app, lock_app, ota_provider_app, o
             setup_app_link_up=not (ble_wifi or wifi_paf),
             # Change the app link name so the interface will be recognized as WiFi or Ethernet
             # depending on the commissioning method used.
-            app_link_name='wlx-app' if (ble_wifi or wifi_paf) else 'eth-app')
-
+            app_link_name='wlx-app' if (ble_wifi or wifi_paf) else 'eth-app',
+            tool_link_name='wlx-tool' if wifi_paf else 'eth-tool')
         if ble_wifi:
             bus = chiptest.linux.DBusTestSystemBus()
             bluetooth = chiptest.linux.BluetoothMock()
