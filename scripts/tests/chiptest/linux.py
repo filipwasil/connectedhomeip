@@ -422,10 +422,10 @@ class WpaSupplicantMock(threading.Thread):
         @sdbus.dbus_method_async("s", "o")
         async def GetInterface(self, name) -> str:
             name_lower = name.lower()
-            if 'app' == name.lower():
+            if 'app' in name.lower():
                 return self.mock.interfaces[0].path
             elif 'tool' in name_lower and len[self.mock_interfaces] > 1:
-                return self.mock.interfacecs[1].path
+                return self.mock.interfaces[1].path
             else:
                 return self.mock.interfaces[0].path
 
