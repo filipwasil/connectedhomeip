@@ -164594,6 +164594,8 @@ public:
         : ClusterCommand("solicit-offer")
         , mComplex_ICEServers(&mRequest.ICEServers)
         , mComplex_SFrameConfig(&mRequest.SFrameConfig)
+        , mComplex_VideoStreams(&mRequest.videoStreams)
+        , mComplex_AudioStreams(&mRequest.audioStreams)
     {
 #if MTR_ENABLE_PROVISIONAL
         AddArgument("StreamUsage", 0, UINT8_MAX, &mRequest.streamUsage);
@@ -164618,6 +164620,12 @@ public:
 #endif // MTR_ENABLE_PROVISIONAL
 #if MTR_ENABLE_PROVISIONAL
         AddArgument("SFrameConfig", &mComplex_SFrameConfig);
+#endif // MTR_ENABLE_PROVISIONAL
+#if MTR_ENABLE_PROVISIONAL
+        AddArgument("VideoStreams", &mComplex_VideoStreams);
+#endif // MTR_ENABLE_PROVISIONAL
+#if MTR_ENABLE_PROVISIONAL
+        AddArgument("AudioStreams", &mComplex_AudioStreams);
 #endif // MTR_ENABLE_PROVISIONAL
         ClusterCommand::AddArguments();
     }
@@ -164724,6 +164732,36 @@ public:
             params.sFrameConfig = nil;
         }
 #endif // MTR_ENABLE_PROVISIONAL
+#if MTR_ENABLE_PROVISIONAL
+        if (mRequest.videoStreams.HasValue()) {
+            { // Scope for our temporary variables
+                auto * array_1 = [NSMutableArray new];
+                for (auto & entry_1 : mRequest.videoStreams.Value()) {
+                    NSNumber * newElement_1;
+                    newElement_1 = [NSNumber numberWithUnsignedShort:entry_1];
+                    [array_1 addObject:newElement_1];
+                }
+                params.videoStreams = array_1;
+            }
+        } else {
+            params.videoStreams = nil;
+        }
+#endif // MTR_ENABLE_PROVISIONAL
+#if MTR_ENABLE_PROVISIONAL
+        if (mRequest.audioStreams.HasValue()) {
+            { // Scope for our temporary variables
+                auto * array_1 = [NSMutableArray new];
+                for (auto & entry_1 : mRequest.audioStreams.Value()) {
+                    NSNumber * newElement_1;
+                    newElement_1 = [NSNumber numberWithUnsignedShort:entry_1];
+                    [array_1 addObject:newElement_1];
+                }
+                params.audioStreams = array_1;
+            }
+        } else {
+            params.audioStreams = nil;
+        }
+#endif // MTR_ENABLE_PROVISIONAL
         uint16_t repeatCount = mRepeatCount.ValueOr(1);
         uint16_t __block responsesNeeded = repeatCount;
         while (repeatCount--) {
@@ -164753,6 +164791,8 @@ private:
     chip::app::Clusters::WebRTCTransportProvider::Commands::SolicitOffer::Type mRequest;
     TypedComplexArgument<chip::Optional<chip::app::DataModel::List<const chip::app::Clusters::Globals::Structs::ICEServerStruct::Type>>> mComplex_ICEServers;
     TypedComplexArgument<chip::Optional<chip::app::Clusters::WebRTCTransportProvider::Structs::SFrameStruct::Type>> mComplex_SFrameConfig;
+    TypedComplexArgument<chip::Optional<chip::app::DataModel::List<const uint16_t>>> mComplex_VideoStreams;
+    TypedComplexArgument<chip::Optional<chip::app::DataModel::List<const uint16_t>>> mComplex_AudioStreams;
 };
 
 #endif // MTR_ENABLE_PROVISIONAL
@@ -164766,6 +164806,8 @@ public:
         : ClusterCommand("provide-offer")
         , mComplex_ICEServers(&mRequest.ICEServers)
         , mComplex_SFrameConfig(&mRequest.SFrameConfig)
+        , mComplex_VideoStreams(&mRequest.videoStreams)
+        , mComplex_AudioStreams(&mRequest.audioStreams)
     {
 #if MTR_ENABLE_PROVISIONAL
         AddArgument("WebRTCSessionID", 0, UINT16_MAX, &mRequest.webRTCSessionID);
@@ -164796,6 +164838,12 @@ public:
 #endif // MTR_ENABLE_PROVISIONAL
 #if MTR_ENABLE_PROVISIONAL
         AddArgument("SFrameConfig", &mComplex_SFrameConfig);
+#endif // MTR_ENABLE_PROVISIONAL
+#if MTR_ENABLE_PROVISIONAL
+        AddArgument("VideoStreams", &mComplex_VideoStreams);
+#endif // MTR_ENABLE_PROVISIONAL
+#if MTR_ENABLE_PROVISIONAL
+        AddArgument("AudioStreams", &mComplex_AudioStreams);
 #endif // MTR_ENABLE_PROVISIONAL
         ClusterCommand::AddArguments();
     }
@@ -164912,6 +164960,36 @@ public:
             params.sFrameConfig = nil;
         }
 #endif // MTR_ENABLE_PROVISIONAL
+#if MTR_ENABLE_PROVISIONAL
+        if (mRequest.videoStreams.HasValue()) {
+            { // Scope for our temporary variables
+                auto * array_1 = [NSMutableArray new];
+                for (auto & entry_1 : mRequest.videoStreams.Value()) {
+                    NSNumber * newElement_1;
+                    newElement_1 = [NSNumber numberWithUnsignedShort:entry_1];
+                    [array_1 addObject:newElement_1];
+                }
+                params.videoStreams = array_1;
+            }
+        } else {
+            params.videoStreams = nil;
+        }
+#endif // MTR_ENABLE_PROVISIONAL
+#if MTR_ENABLE_PROVISIONAL
+        if (mRequest.audioStreams.HasValue()) {
+            { // Scope for our temporary variables
+                auto * array_1 = [NSMutableArray new];
+                for (auto & entry_1 : mRequest.audioStreams.Value()) {
+                    NSNumber * newElement_1;
+                    newElement_1 = [NSNumber numberWithUnsignedShort:entry_1];
+                    [array_1 addObject:newElement_1];
+                }
+                params.audioStreams = array_1;
+            }
+        } else {
+            params.audioStreams = nil;
+        }
+#endif // MTR_ENABLE_PROVISIONAL
         uint16_t repeatCount = mRepeatCount.ValueOr(1);
         uint16_t __block responsesNeeded = repeatCount;
         while (repeatCount--) {
@@ -164941,6 +165019,8 @@ private:
     chip::app::Clusters::WebRTCTransportProvider::Commands::ProvideOffer::Type mRequest;
     TypedComplexArgument<chip::Optional<chip::app::DataModel::List<const chip::app::Clusters::Globals::Structs::ICEServerStruct::Type>>> mComplex_ICEServers;
     TypedComplexArgument<chip::Optional<chip::app::Clusters::WebRTCTransportProvider::Structs::SFrameStruct::Type>> mComplex_SFrameConfig;
+    TypedComplexArgument<chip::Optional<chip::app::DataModel::List<const uint16_t>>> mComplex_VideoStreams;
+    TypedComplexArgument<chip::Optional<chip::app::DataModel::List<const uint16_t>>> mComplex_AudioStreams;
 };
 
 #endif // MTR_ENABLE_PROVISIONAL
@@ -166667,6 +166747,36 @@ public:
         } else {
             params.transportOptions.expiryTime = nil;
         }
+        if (mRequest.transportOptions.videoStreams.HasValue()) {
+            { // Scope for our temporary variables
+                auto * array_2 = [NSMutableArray new];
+                for (auto & entry_2 : mRequest.transportOptions.videoStreams.Value()) {
+                    MTRPushAVStreamTransportClusterVideoStreamStruct * newElement_2;
+                    newElement_2 = [MTRPushAVStreamTransportClusterVideoStreamStruct new];
+                    newElement_2.videoStreamName = [[NSString alloc] initWithBytes:entry_2.videoStreamName.data() length:entry_2.videoStreamName.size() encoding:NSUTF8StringEncoding];
+                    newElement_2.videoStreamID = [NSNumber numberWithUnsignedShort:entry_2.videoStreamID];
+                    [array_2 addObject:newElement_2];
+                }
+                params.transportOptions.videoStreams = array_2;
+            }
+        } else {
+            params.transportOptions.videoStreams = nil;
+        }
+        if (mRequest.transportOptions.audioStreams.HasValue()) {
+            { // Scope for our temporary variables
+                auto * array_2 = [NSMutableArray new];
+                for (auto & entry_2 : mRequest.transportOptions.audioStreams.Value()) {
+                    MTRPushAVStreamTransportClusterAudioStreamStruct * newElement_2;
+                    newElement_2 = [MTRPushAVStreamTransportClusterAudioStreamStruct new];
+                    newElement_2.audioStreamName = [[NSString alloc] initWithBytes:entry_2.audioStreamName.data() length:entry_2.audioStreamName.size() encoding:NSUTF8StringEncoding];
+                    newElement_2.audioStreamID = [NSNumber numberWithUnsignedShort:entry_2.audioStreamID];
+                    [array_2 addObject:newElement_2];
+                }
+                params.transportOptions.audioStreams = array_2;
+            }
+        } else {
+            params.transportOptions.audioStreams = nil;
+        }
 #endif // MTR_ENABLE_PROVISIONAL
         uint16_t repeatCount = mRepeatCount.ValueOr(1);
         uint16_t __block responsesNeeded = repeatCount;
@@ -166892,6 +167002,36 @@ public:
             params.transportOptions.expiryTime = [NSNumber numberWithUnsignedInt:mRequest.transportOptions.expiryTime.Value()];
         } else {
             params.transportOptions.expiryTime = nil;
+        }
+        if (mRequest.transportOptions.videoStreams.HasValue()) {
+            { // Scope for our temporary variables
+                auto * array_2 = [NSMutableArray new];
+                for (auto & entry_2 : mRequest.transportOptions.videoStreams.Value()) {
+                    MTRPushAVStreamTransportClusterVideoStreamStruct * newElement_2;
+                    newElement_2 = [MTRPushAVStreamTransportClusterVideoStreamStruct new];
+                    newElement_2.videoStreamName = [[NSString alloc] initWithBytes:entry_2.videoStreamName.data() length:entry_2.videoStreamName.size() encoding:NSUTF8StringEncoding];
+                    newElement_2.videoStreamID = [NSNumber numberWithUnsignedShort:entry_2.videoStreamID];
+                    [array_2 addObject:newElement_2];
+                }
+                params.transportOptions.videoStreams = array_2;
+            }
+        } else {
+            params.transportOptions.videoStreams = nil;
+        }
+        if (mRequest.transportOptions.audioStreams.HasValue()) {
+            { // Scope for our temporary variables
+                auto * array_2 = [NSMutableArray new];
+                for (auto & entry_2 : mRequest.transportOptions.audioStreams.Value()) {
+                    MTRPushAVStreamTransportClusterAudioStreamStruct * newElement_2;
+                    newElement_2 = [MTRPushAVStreamTransportClusterAudioStreamStruct new];
+                    newElement_2.audioStreamName = [[NSString alloc] initWithBytes:entry_2.audioStreamName.data() length:entry_2.audioStreamName.size() encoding:NSUTF8StringEncoding];
+                    newElement_2.audioStreamID = [NSNumber numberWithUnsignedShort:entry_2.audioStreamID];
+                    [array_2 addObject:newElement_2];
+                }
+                params.transportOptions.audioStreams = array_2;
+            }
+        } else {
+            params.transportOptions.audioStreams = nil;
         }
 #endif // MTR_ENABLE_PROVISIONAL
         uint16_t repeatCount = mRepeatCount.ValueOr(1);
