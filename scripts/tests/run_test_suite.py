@@ -536,7 +536,7 @@ def cmd_run(context: click.Context, dry_run: bool, iterations: int,
                 interfaces_info = [
                     app_name
                 ]
-                to_terminate.append(chiptest.linux.WpaSupplicantMock(interfaces_info, "MatterAP", "MatterAPPassword", ns))
+                to_terminate.append(chiptest.linux.WpaSupplicantMock(interfaces_info, "MatterAP", "MatterAPPassword", ["1"], ns))
             elif commissioning_method == 'ble-thread':
                 to_terminate.append(chiptest.linux.DBusTestSystemBus())
                 to_terminate.append(chiptest.linux.BluetoothMock())
@@ -553,7 +553,7 @@ def cmd_run(context: click.Context, dry_run: bool, iterations: int,
                     app_name,
                     tool_name
                 ]
-                to_terminate.append(chiptest.linux.WpaSupplicantMock(interfaces_info, "MatterAP", "MatterAPPassword", ns))
+                to_terminate.append(chiptest.linux.WpaSupplicantMock(interfaces_info, "MatterAP", "MatterAPPassword", ["1"], ns))
 
             to_terminate.append(executor := chiptest.linux.LinuxNamespacedExecutor(ns))
         elif sys.platform == 'darwin':
