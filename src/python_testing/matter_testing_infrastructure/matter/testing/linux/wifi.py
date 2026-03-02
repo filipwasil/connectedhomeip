@@ -193,9 +193,7 @@ class WpaSupplicantMock(threading.Thread):
         async def CreateInterface(self, args: DictVariantT) -> str:
             ifname = ''
             if 'Ifname' in args:
-                value = args['Ifname']
-                # value may be GVariant (type_string, actual_value) or a raw value.
-                raw = value[1]
+                raw = args['Ifname'][1]
                 # Ensure we provide a str to GetInterface
                 ifname = raw if isinstance(raw, str) else str(raw)
             return await self.GetInterface(ifname)
@@ -487,11 +485,11 @@ class WpaSupplicantMock(threading.Thread):
 
     class WpaNetwork(sdbus.DbusInterfaceCommonAsync,
                      interface_name="fi.w1.wpa_supplicant1.Network"):
-        def __init__(self, ssid: str, interface_index: int, network_id: int):
+        def __init__(self, ssid: str, interface_index: int):
             super().__init__()
             self.ssid = ssid
             self.interface_index = interface_index
-            self.path = f"/fi/w1/wpa_supplicant1/Interfaces/{interface_index}/Networks/{network_id}"
+            self.path = f"/fi/w1/wpa_supplicant1/Interfaces/{interface_index}/Networks/1"
             self.enabled = False
 
         @sdbus.dbus_property_async("a{sv}")
@@ -524,7 +522,7 @@ class WpaSupplicantMock(threading.Thread):
 
         log.info("WiFi-PAF mode enabled with NAN simulator")
 
-    def __init__(self, interfaces_names: list[str], ssid: str, password: str, network_id: int, ns: IsolatedNetworkNamespace):
+    def __init__(self, interfaces_names: list[str], ssid: str, password: str, ns: IsolatedNetworkNamespace):
         self.ssid = ssid
         self.password = password
         self.networking = ns
@@ -535,7 +533,7 @@ class WpaSupplicantMock(threading.Thread):
         for interface_idx, name in enumerate(interfaces_names):
             self.interfaces.append(
                 interface := WpaSupplicantMock.WpaInterface(self,
-                                                            interface_idx, WpaSupplicantMock.WpaNetwork(self.ssid, interface_idx, network_id)))
+                                                            interface_idx, WpaSupplicantMock.WpaNetwork(self.ssid, interface_idx)))
             # Assign interfaces to given names
             self.nan_simulator.register_interface(name, interface)
 
