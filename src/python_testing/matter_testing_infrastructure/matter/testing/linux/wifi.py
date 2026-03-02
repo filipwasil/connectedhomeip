@@ -202,9 +202,10 @@ class WpaSupplicantMock(threading.Thread):
 
         @sdbus.dbus_method_async("s", "o")
         async def GetInterface(self, name: str) -> str:
-            # if the interface is not app, the last index is returned
-            idx = self.mock.get_interface_index(name)
-            return self.mock.interfaces[idx].path
+            for interface in self.mock.interfaces:
+                if interface.interface_name_in_sim in name.lower():  # Case-insensitive match
+                    return interface.path
+            return next(reversed(self.mock.interfaces)).path
 
     class WpaInterface(sdbus.DbusInterfaceCommonAsync,
                        interface_name="fi.w1.wpa_supplicant1.Interface"):
@@ -522,17 +523,6 @@ class WpaSupplicantMock(threading.Thread):
             interface.network.export_to_dbus(interface.network.path)
 
         log.info("WiFi-PAF mode enabled with NAN simulator")
-
-    def get_interface_index(self, name: str) -> int:
-        """Return the index of the inteface containing given 'name'.
-        If no match is found, returns the index of the last available interface.
-        """
-        name_lower = name.lower()
-        for idx, interface in enumerate(self.interfaces):
-            if interface.interface_name_in_sim in name_lower:  # Case-insensitive match
-                return idx
-
-        return -1  # Default to last interface if no app found in the interface name
 
     def __init__(self, interfaces_names: list[str], ssid: str, password: str, network_id: int, ns: IsolatedNetworkNamespace):
         self.ssid = ssid
