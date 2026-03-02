@@ -195,10 +195,7 @@ class WpaSupplicantMock(threading.Thread):
             if 'Ifname' in args:
                 value = args['Ifname']
                 # value may be GVariant (type_string, actual_value) or a raw value.
-                if isinstance(value, tuple) and len(value) == 2:
-                    raw = value[1]
-                else:
-                    raw = value
+                raw = value[1]
                 # Ensure we provide a str to GetInterface
                 ifname = raw if isinstance(raw, str) else str(raw)
             return await self.GetInterface(ifname)
@@ -377,8 +374,7 @@ class WpaSupplicantMock(threading.Thread):
             """Cancel a NAN subscribe session."""
             log.debug("NANCancelSubscribe: subscribe_id=%d", subscribe_id)
 
-            if subscribe_id in self.nan_sessions:
-                del self.nan_sessions[subscribe_id]
+            self.nan_sessions.pop(subscribe_id, None)
 
             if self.nan_simulator:
                 self.nan_simulator.on_subscribe_cancelled(subscribe_id)
@@ -410,11 +406,7 @@ class WpaSupplicantMock(threading.Thread):
             """Extract values from GVariant a{sv} format to plain dict."""
             result = {}
             for key, value in variant_dict.items():
-                if isinstance(value, tuple) and len(value) == 2:
-                    # GVariant format: (type_string, actual_value)
-                    result[key] = value[1]
-                else:
-                    result[key] = value
+                result[key] = value[1]
             return result
 
         # =====================================================================
