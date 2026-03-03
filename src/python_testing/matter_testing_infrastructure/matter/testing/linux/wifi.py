@@ -234,52 +234,46 @@ class WpaSupplicantMock(threading.Thread):
         @sdbus.dbus_method_async("s")
         async def AutoScan(self, arg: str) -> None:
             log.debug("AutoScan: %s", arg)
-            # self.ScanDone.emit(True)
-            async def scan():
-                # Create BSS object for the configured network if not already created
-                if not self.bss_objects:
-                    # Generate a mock BSSID
-                    bssid = bytes([0xaa, 0xbb, 0xcc, 0xdd, 0xee, self.index])
-                    bss = WpaSupplicantMock.WpaBss(
-                        interface_index=self.index,
-                        bss_index=0,
-                        ssid=self.network.ssid,
-                        bssid=bssid,
-                        signal=-50,  # Good signal strength
-                        frequency=2437  # Channel 6 (2.4 GHz)
-                    )
-                    bss.export_to_dbus(bss.path)
-                    self.bss_objects.append(bss)
-                    log.debug("Created BSS object: path=%s, ssid=%s", bss.path, self.network.ssid)
-
-                    self.ScanDone.emit(True)
-
-            asyncio.create_task(scan())
+            # Create BSS object for the configured network if not already created
+            if not self.bss_objects:
+                # Generate a mock BSSID
+                bssid = bytes([0xaa, 0xbb, 0xcc, 0xdd, 0xee, self.index])
+                bss = WpaSupplicantMock.WpaBss(
+                    interface_index=self.index,
+                    bss_index=0,
+                    ssid=self.network.ssid,
+                    bssid=bssid,
+                    signal=-50,  # Good signal strength
+                    frequency=2437  # Channel 6 (2.4 GHz)
+                )
+                bss.export_to_dbus(bss.path)
+                self.bss_objects.append(bss)
+                log.debug("Created BSS object: path=%s, ssid=%s", bss.path, self.network.ssid)
+            # Always emit ScanDone - signals interface is ready for WiFi-PAF
+            log.debug("Emitting ScanDone signal")
+            self.ScanDone.emit(True)
 
         @sdbus.dbus_method_async("a{sv}")
         async def Scan(self, args: DictVariantT) -> None:
             log.debug("Scan called with args: %s", args)
-
-            async def scan():
-                # Create BSS object for the configured network if not already created
-                if not self.bss_objects:
-                    # Generate a mock BSSID
-                    bssid = bytes([0xaa, 0xbb, 0xcc, 0xdd, 0xee, self.index])
-                    bss = WpaSupplicantMock.WpaBss(
-                        interface_index=self.index,
-                        bss_index=0,
-                        ssid=self.network.ssid,
-                        bssid=bssid,
-                        signal=-50,  # Good signal strength
-                        frequency=2437  # Channel 6 (2.4 GHz)
-                    )
-                    bss.export_to_dbus(bss.path)
-                    self.bss_objects.append(bss)
-                    log.debug("Created BSS object: path=%s, ssid=%s", bss.path, self.network.ssid)
-
-                    self.ScanDone.emit(True)
-
-            asyncio.create_task(scan())
+            # Create BSS object for the configured network if not already created
+            if not self.bss_objects:
+                # Generate a mock BSSID
+                bssid = bytes([0xaa, 0xbb, 0xcc, 0xdd, 0xee, self.index])
+                bss = WpaSupplicantMock.WpaBss(
+                    interface_index=self.index,
+                    bss_index=0,
+                    ssid=self.network.ssid,
+                    bssid=bssid,
+                    signal=-50,  # Good signal strength
+                    frequency=2437  # Channel 6 (2.4 GHz)
+                )
+                bss.export_to_dbus(bss.path)
+                self.bss_objects.append(bss)
+                log.debug("Created BSS object: path=%s, ssid=%s", bss.path, self.network.ssid)
+            # Always emit ScanDone
+            log.debug("Emitting ScanDone signal")
+            self.ScanDone.emit(True)
 
         @sdbus.dbus_method_async("a{sv}", "o")
         async def AddNetwork(self, args: DictVariantT) -> str:
@@ -294,7 +288,6 @@ class WpaSupplicantMock(threading.Thread):
                 await self.State.set_async("associated")
                 self.mock.networking.setup_app_link_up()
                 await self.State.set_async("completed")
-                # self.ScanDone.emit(True)
             
             await self.CurrentNetwork.set_async(path)
             asyncio.create_task(associate())
