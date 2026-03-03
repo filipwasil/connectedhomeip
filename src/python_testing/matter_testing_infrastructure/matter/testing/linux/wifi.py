@@ -229,6 +229,7 @@ class WpaSupplicantMock(threading.Thread):
             self.nan_sessions: dict[int, dict] = {}
             self.interface_name_in_sim = None
             self.nan_simulator = None
+            self.bss_objects: list[WpaSupplicantMock.WpaBss] = []
 
         @sdbus.dbus_method_async("s")
         async def AutoScan(self, arg: str) -> None:
@@ -243,12 +244,27 @@ class WpaSupplicantMock(threading.Thread):
 
         @sdbus.dbus_method_async("a{sv}")
         async def Scan(self, args: DictVariantT) -> None:
-            log.debug("DEBUGG1: Scan")
+            log.debug("Scan called with args: %s", args)
+
             async def scan():
-                # await self.State.set_async("inactive")
+                # Create BSS object for the configured network if not already created
+                if not self.bss_objects:
+                    # Generate a mock BSSID
+                    bssid = bytes([0xaa, 0xbb, 0xcc, 0xdd, 0xee, self.index])
+                    bss = WpaSupplicantMock.WpaBss(
+                        interface_index=self.index,
+                        bss_index=0,
+                        ssid=self.network.ssid,
+                        bssid=bssid,
+                        signal=-50,  # Good signal strength
+                        frequency=2437  # Channel 6 (2.4 GHz)
+                    )
+                    bss.export_to_dbus(bss.path)
+                    self.bss_objects.append(bss)
+                    log.debug("Created BSS object: path=%s, ssid=%s", bss.path, self.network.ssid)
+
                 self.ScanDone.emit(True)
 
-            # await self.State.set_async("scanning")
             asyncio.create_task(scan())
 
         @sdbus.dbus_method_async("a{sv}", "o")
@@ -497,42 +513,48 @@ class WpaSupplicantMock(threading.Thread):
             return "WPA2-PSK"
 
         @sdbus.dbus_property_async("ao")
-        def BSSs(self) -> list:
-            #uzupelnic o networkktory jest predefiniowany
-            return [] #todo
-    #         const char * const * bsss = wpa_supplicant_1_interface_get_bsss(iface);
-    # if (bsss == nullptr)
-    # {
-    #     ChipLogProgress(DeviceLayer, "wpa_supplicant: no network found");
-    #     TEMPORARY_RETURN_IGNORED DeviceLayer::SystemLayer().ScheduleLambda([this]() {
-    #         if (mpScanCallback != nullptr)
-    #         {
-    #             ChipLogProgress(DeviceLayer, "DEBUGGG1");
-    #             mpScanCallback->OnFinished(Status::kSuccess, CharSpan(), nullptr);
-    #             mpScanCallback = nullptr;
-    #         }
-    #         else
-    #         {
-    #             ChipLogProgress(DeviceLayer, "DEBUGGG2");
-    #         }
-    #     });
-    #     return;
-    # }
-
-    # std::vector<WiFiScanResponse> * networkScanned = new std::vector<WiFiScanResponse>();
-    # for (const char * bssPath = (bsss != nullptr ? *bsss : nullptr); bssPath != nullptr; bssPath = *(++bsss))
-    # {
-    #     WiFiScanResponse network;
-    #     if (_GetBssInfo(bssPath, network))
-    #     {
-    #         if (sInterestedSSIDLen == 0 || TUTAJ
-    #             (network.ssidLen == sInterestedSSIDLen && memcmp(network.ssid, sInterestedSSID, sInterestedSSIDLen) == 0))
-    #         {
-    #             networkScanned->push_back(network);
-    #         }
-    #     }
-    # }
+        def BSSs(self) -> list[str]:
+            return [bss.path for bss in self.bss_objects]
         
+
+    class WpaBss(sdbus.DbusInterfaceCommonAsync,
+                 interface_name="fi.w1.wpa_supplicant1.BSS"):
+        """D-Bus object representing a discovered BSS (Basic Service Set / WiFi network)."""
+
+        def __init__(self, interface_index: int, bss_index: int, ssid: str,
+                     bssid: bytes, signal: int = -50, frequency: int = 2437):
+            super().__init__()
+            self.path = f"/fi/w1/wpa_supplicant1/Interfaces/{interface_index}/BSSs/{bss_index}"
+            self._ssid = ssid.encode('utf-8')
+            self._bssid = bssid  # 6-byte MAC address
+            self._signal = signal  # dBm (e.g., -50)
+            self._frequency = frequency  # MHz (e.g., 2437 for channel 6)
+
+        @sdbus.dbus_property_async("ay")
+        def SSID(self) -> bytes:
+            return self._ssid
+
+        @sdbus.dbus_property_async("ay")
+        def BSSID(self) -> bytes:
+            return self._bssid
+
+        @sdbus.dbus_property_async("n")
+        def Signal(self) -> int:
+            return self._signal
+
+        @sdbus.dbus_property_async("q")
+        def Frequency(self) -> int:
+            return self._frequency
+
+        @sdbus.dbus_property_async("a{sv}")
+        def WPA(self) -> DictVariantT:
+            # Return empty - indicates no WPA1 security
+            return {}
+
+        @sdbus.dbus_property_async("a{sv}")
+        def RSN(self) -> DictVariantT:
+            # Return WPA2-PSK security info
+            return {"KeyMgmt": ("as", ["wpa-psk"])}
 
     class WpaNetwork(sdbus.DbusInterfaceCommonAsync,
                      interface_name="fi.w1.wpa_supplicant1.Network"):
