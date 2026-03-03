@@ -229,49 +229,27 @@ class WpaSupplicantMock(threading.Thread):
             self.nan_sessions: dict[int, dict] = {}
             self.interface_name_in_sim = None
             self.nan_simulator = None
-            self.bss_objects: list[WpaSupplicantMock.WpaBss] = []
+            # Create BSS object for this interface (exported to D-Bus in startup())
+            bssid = bytes([0xaa, 0xbb, 0xcc, 0xdd, 0xee, index])
+            self.bss = WpaSupplicantMock.WpaBss(
+                interface_index=index,
+                bss_index=0,
+                ssid=network.ssid,
+                bssid=bssid,
+                signal=-50,
+                frequency=2437
+            )
+            self.bss_objects: list[WpaSupplicantMock.WpaBss] = [self.bss]
 
         @sdbus.dbus_method_async("s")
         async def AutoScan(self, arg: str) -> None:
             log.debug("AutoScan: %s", arg)
-            # Create BSS object for the configured network if not already created
-            if not self.bss_objects:
-                # Generate a mock BSSID
-                bssid = bytes([0xaa, 0xbb, 0xcc, 0xdd, 0xee, self.index])
-                bss = WpaSupplicantMock.WpaBss(
-                    interface_index=self.index,
-                    bss_index=0,
-                    ssid=self.network.ssid,
-                    bssid=bssid,
-                    signal=-50,  # Good signal strength
-                    frequency=2437  # Channel 6 (2.4 GHz)
-                )
-                bss.export_to_dbus(bss.path)
-                self.bss_objects.append(bss)
-                log.debug("Created BSS object: path=%s, ssid=%s", bss.path, self.network.ssid)
-            # Always emit ScanDone - signals interface is ready for WiFi-PAF
             log.debug("Emitting ScanDone signal")
             self.ScanDone.emit(True)
 
         @sdbus.dbus_method_async("a{sv}")
         async def Scan(self, args: DictVariantT) -> None:
             log.debug("Scan called with args: %s", args)
-            # Create BSS object for the configured network if not already created
-            if not self.bss_objects:
-                # Generate a mock BSSID
-                bssid = bytes([0xaa, 0xbb, 0xcc, 0xdd, 0xee, self.index])
-                bss = WpaSupplicantMock.WpaBss(
-                    interface_index=self.index,
-                    bss_index=0,
-                    ssid=self.network.ssid,
-                    bssid=bssid,
-                    signal=-50,  # Good signal strength
-                    frequency=2437  # Channel 6 (2.4 GHz)
-                )
-                bss.export_to_dbus(bss.path)
-                self.bss_objects.append(bss)
-                log.debug("Created BSS object: path=%s, ssid=%s", bss.path, self.network.ssid)
-            # Always emit ScanDone
             log.debug("Emitting ScanDone signal")
             self.ScanDone.emit(True)
 
@@ -599,6 +577,7 @@ class WpaSupplicantMock(threading.Thread):
         for interface in self.interfaces:
             interface.export_to_dbus(interface.path)
             interface.network.export_to_dbus(interface.network.path)
+            interface.bss.export_to_dbus(interface.bss.path)
 
         log.info("WiFi-PAF mode enabled with NAN simulator")
 
