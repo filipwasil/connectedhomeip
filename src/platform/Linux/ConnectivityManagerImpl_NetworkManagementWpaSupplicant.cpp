@@ -1574,8 +1574,13 @@ void ConnectivityManagerImpl::_OnWpaInterfaceScanDone(WpaSupplicant1Interface * 
         TEMPORARY_RETURN_IGNORED DeviceLayer::SystemLayer().ScheduleLambda([this]() {
             if (mpScanCallback != nullptr)
             {
+                ChipLogProgress(DeviceLayer, "DEBUGGG1");
                 mpScanCallback->OnFinished(Status::kSuccess, CharSpan(), nullptr);
                 mpScanCallback = nullptr;
+            }
+            else
+            {
+                ChipLogProgress(DeviceLayer, "DEBUGGG2");
             }
         });
         return;

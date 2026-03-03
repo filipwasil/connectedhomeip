@@ -233,10 +233,23 @@ class WpaSupplicantMock(threading.Thread):
         @sdbus.dbus_method_async("s")
         async def AutoScan(self, arg: str) -> None:
             pass
+            # log.debug("DEBUGG1: AutoScan" + arg)
+
+            # async def scan():
+            #     log.debug("DEBUGG: AutoScan1")
+            #     self.ScanDone.emit(True)
+
+            # asyncio.create_task(scan())
 
         @sdbus.dbus_method_async("a{sv}")
         async def Scan(self, args: DictVariantT) -> None:
-            await self.State.set_async("scanning")
+            log.debug("DEBUGG1: Scan")
+            async def scan():
+                # await self.State.set_async("inactive")
+                self.ScanDone.emit(True)
+
+            # await self.State.set_async("scanning")
+            asyncio.create_task(scan())
 
         @sdbus.dbus_method_async("a{sv}", "o")
         async def AddNetwork(self, args: DictVariantT) -> str:
@@ -251,9 +264,8 @@ class WpaSupplicantMock(threading.Thread):
                 await self.State.set_async("associated")
                 self.mock.networking.setup_app_link_up()
                 await self.State.set_async("completed")
-
-                self.ScanDone.emit(True)
-
+                # self.ScanDone.emit(True)
+            
             await self.CurrentNetwork.set_async(path)
             asyncio.create_task(associate())
 
@@ -453,6 +465,7 @@ class WpaSupplicantMock(threading.Thread):
         @sdbus.dbus_signal_async("b")
         def ScanDone(self) -> bool:
             """Signal emitted when scaning is done"""
+            log.debug("DEBUGG: ScanDone")
             raise NotImplementedError
 
         # =====================================================================
@@ -461,6 +474,10 @@ class WpaSupplicantMock(threading.Thread):
 
         @sdbus.dbus_property_async("s")
         def State(self) -> str:
+            return self.state
+
+        @sdbus.dbus_property_async("s")
+        def Scanning(self) -> str:
             return self.state
 
         @State.setter_private
@@ -481,7 +498,41 @@ class WpaSupplicantMock(threading.Thread):
 
         @sdbus.dbus_property_async("ao")
         def BSSs(self) -> list:
-            return []
+            #uzupelnic o networkktory jest predefiniowany
+            return [] #todo
+    #         const char * const * bsss = wpa_supplicant_1_interface_get_bsss(iface);
+    # if (bsss == nullptr)
+    # {
+    #     ChipLogProgress(DeviceLayer, "wpa_supplicant: no network found");
+    #     TEMPORARY_RETURN_IGNORED DeviceLayer::SystemLayer().ScheduleLambda([this]() {
+    #         if (mpScanCallback != nullptr)
+    #         {
+    #             ChipLogProgress(DeviceLayer, "DEBUGGG1");
+    #             mpScanCallback->OnFinished(Status::kSuccess, CharSpan(), nullptr);
+    #             mpScanCallback = nullptr;
+    #         }
+    #         else
+    #         {
+    #             ChipLogProgress(DeviceLayer, "DEBUGGG2");
+    #         }
+    #     });
+    #     return;
+    # }
+
+    # std::vector<WiFiScanResponse> * networkScanned = new std::vector<WiFiScanResponse>();
+    # for (const char * bssPath = (bsss != nullptr ? *bsss : nullptr); bssPath != nullptr; bssPath = *(++bsss))
+    # {
+    #     WiFiScanResponse network;
+    #     if (_GetBssInfo(bssPath, network))
+    #     {
+    #         if (sInterestedSSIDLen == 0 || TUTAJ
+    #             (network.ssidLen == sInterestedSSIDLen && memcmp(network.ssid, sInterestedSSID, sInterestedSSIDLen) == 0))
+    #         {
+    #             networkScanned->push_back(network);
+    #         }
+    #     }
+    # }
+        
 
     class WpaNetwork(sdbus.DbusInterfaceCommonAsync,
                      interface_name="fi.w1.wpa_supplicant1.Network"):
