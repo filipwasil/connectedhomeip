@@ -233,14 +233,28 @@ class WpaSupplicantMock(threading.Thread):
 
         @sdbus.dbus_method_async("s")
         async def AutoScan(self, arg: str) -> None:
-            pass
-            # log.debug("DEBUGG1: AutoScan" + arg)
+            log.debug("AutoScan: %s", arg)
+            # self.ScanDone.emit(True)
+            async def scan():
+                # Create BSS object for the configured network if not already created
+                if not self.bss_objects:
+                    # Generate a mock BSSID
+                    bssid = bytes([0xaa, 0xbb, 0xcc, 0xdd, 0xee, self.index])
+                    bss = WpaSupplicantMock.WpaBss(
+                        interface_index=self.index,
+                        bss_index=0,
+                        ssid=self.network.ssid,
+                        bssid=bssid,
+                        signal=-50,  # Good signal strength
+                        frequency=2437  # Channel 6 (2.4 GHz)
+                    )
+                    bss.export_to_dbus(bss.path)
+                    self.bss_objects.append(bss)
+                    log.debug("Created BSS object: path=%s, ssid=%s", bss.path, self.network.ssid)
 
-            # async def scan():
-            #     log.debug("DEBUGG: AutoScan1")
-            #     self.ScanDone.emit(True)
+                    self.ScanDone.emit(True)
 
-            # asyncio.create_task(scan())
+            asyncio.create_task(scan())
 
         @sdbus.dbus_method_async("a{sv}")
         async def Scan(self, args: DictVariantT) -> None:
@@ -263,7 +277,7 @@ class WpaSupplicantMock(threading.Thread):
                     self.bss_objects.append(bss)
                     log.debug("Created BSS object: path=%s, ssid=%s", bss.path, self.network.ssid)
 
-                self.ScanDone.emit(True)
+                    self.ScanDone.emit(True)
 
             asyncio.create_task(scan())
 
