@@ -296,10 +296,11 @@ class CommissioningMethod(enum.StrEnum):
     BLE_WIFI = "ble-wifi"
     BLE_THREAD = "ble-thread"
     THREAD_MESHCOP = "thread-meshcop"
+    WIFIPAF_WIFI = "wifipaf-wifi"
 
     @property
     def wifi_required(self) -> bool:
-        return self in {CommissioningMethod.BLE_WIFI}
+        return self in {CommissioningMethod.BLE_WIFI, CommissioningMethod.WIFIPAF_WIFI}
 
     @property
     def thread_required(self) -> bool:
@@ -582,7 +583,7 @@ def cmd_run(context: click.Context, dry_run: bool, iterations: int, app_path: li
                             op_network='Thread' if thread_required else 'WiFi',
                             thread_ba_host=thread_ba_host,
                             thread_ba_port=thread_ba_port,
-                            wifipaf_wifi=commissioning_method == 'wifipaf-wifi'
+                            wifipaf_wifi=commissioning_method == CommissioningMethod.WIFIPAF_WIFI
                         )))
                     if result.exception is not None:
                         raise result.exception
